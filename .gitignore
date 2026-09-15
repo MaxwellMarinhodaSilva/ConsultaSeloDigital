@@ -1,0 +1,62 @@
+# Compilação Maven
+
+target/
+*.class
+
+# IntelliJ IDEA
+
+.idea/
+*.iml
+*.iws
+*.ipr
+out/
+
+# NetBeans
+
+/nbproject/private/
+/nbbuild/
+/dist/
+/nbdist/
+/.nb-gradle/
+
+# Eclipse
+
+.classpath
+.project
+.settings/
+
+# VS Code
+
+.vscode/
+
+# Arquivos do sistema
+
+.DS_Store
+Thumbs.db
+
+# Logs
+
+*.log
+logs/
+
+# Arquivos temporários
+
+*.tmp
+*.temp
+
+# Arquivos gerados
+
+hs_err_pid*
+
+# Variáveis de ambiente / segredos
+
+.env
+.env.*
+*.key
+*.pem
+
+# Configurações locais
+
+application-local.properties
+application-local.yml
+application-local.yaml
