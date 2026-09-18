@@ -2,6 +2,12 @@
 
 Aplicação desktop em Java 21 para consultar selos digitais em lote nos serviços públicos do TJPB, TJRN e TJPE.
 
+<div align="center">
+  <img src="assets/consulta-selo-digital.png"
+       alt="Visão geral do projeto ConsultaSeloDigital"
+       width="100%">
+</div>
+
 ## Visão geral
 
 O ConsultaSeloDigital centraliza a consulta de selos de diferentes tribunais em uma interface única. A aplicação aceita entrada manual ou importação de arquivos, executa as consultas em sequência, mantém a ordem original e apresenta os resultados em tabelas específicas para cada tribunal.
