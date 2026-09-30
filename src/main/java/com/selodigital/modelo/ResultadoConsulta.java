@@ -22,6 +22,7 @@ public class ResultadoConsulta {
     private final Selo selo;
     private final Tribunal tribunal;
     private final StatusConsulta status;
+    private final DiagnosticoConsulta diagnostico;
 
     /*
      * Dados necessários para a tabela de resultados.
@@ -70,7 +71,8 @@ public class ResultadoConsulta {
                 "",
                 "",
                 Collections.emptyMap(),
-                null
+                null,
+                DiagnosticoConsulta.semFalha()
         );
     }
 
@@ -97,8 +99,23 @@ public class ResultadoConsulta {
                 tipoAto,
                 subtipoAto,
                 campos,
-                null
+                null,
+                DiagnosticoConsulta.semFalha()
         );
+    }
+
+    public ResultadoConsulta(
+            Selo selo,
+            Tribunal tribunal,
+            StatusConsulta status,
+            String matriculaProtocolo,
+            String tipoAto,
+            String subtipoAto,
+            Map<String, String> campos,
+            String qrCodeConteudo) {
+
+        this(selo, tribunal, status, matriculaProtocolo, tipoAto, subtipoAto,
+                campos, qrCodeConteudo, DiagnosticoConsulta.semFalha());
     }
 
     @JsonCreator
@@ -110,11 +127,15 @@ public class ResultadoConsulta {
             @JsonProperty("tipoAto") String tipoAto,
             @JsonProperty("subtipoAto") String subtipoAto,
             @JsonProperty("campos") Map<String, String> campos,
-            @JsonProperty("qrCodeConteudo") String qrCodeConteudo) {
+            @JsonProperty("qrCodeConteudo") String qrCodeConteudo,
+            @JsonProperty("diagnostico") DiagnosticoConsulta diagnostico) {
 
         this.selo = selo;
         this.tribunal = tribunal;
         this.status = status;
+        this.diagnostico = diagnostico == null
+                ? DiagnosticoConsulta.semFalha()
+                : diagnostico;
 
         this.matriculaProtocolo =
                 matriculaProtocolo == null
@@ -154,6 +175,10 @@ public class ResultadoConsulta {
 
     public StatusConsulta getStatus() {
         return status;
+    }
+
+    public DiagnosticoConsulta getDiagnostico() {
+        return diagnostico;
     }
 
     public String getMatriculaProtocolo() {

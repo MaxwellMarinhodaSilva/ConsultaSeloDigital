@@ -30,13 +30,20 @@ public class ConsultaTJPB implements ConsultaTribunal {
     @Override
     public ResultadoConsulta consultar(Selo selo) {
 
+        String urlSolicitada = "";
+
         try {
 
             String numeroSelo = selo.getNumero();
 
-            String url = URL_BASE + numeroSelo;
+            urlSolicitada = URL_BASE + numeroSelo;
 
-            HttpResponse<String> resposta = HttpUtil.get(url);
+            HttpResponse<String> resposta = HttpUtil.get(urlSolicitada);
+
+            DiagnosticoConsulta diagnostico = HttpUtil.diagnosticarResposta(
+                    urlSolicitada,
+                    resposta
+            );
 
             StatusConsulta status =
                     analisarResposta(
@@ -45,6 +52,8 @@ public class ConsultaTJPB implements ConsultaTribunal {
                             numeroSelo,
                             resposta.uri().toString()
                     );
+
+            diagnostico = ajustarDiagnostico(status, diagnostico);
 
             /*
              * ==================================================
@@ -55,7 +64,7 @@ public class ConsultaTJPB implements ConsultaTribunal {
              * ==================================================
              */
 
-            if (status == StatusConsulta.NAO_ENVIADO) {
+            if (status != StatusConsulta.ENVIADO) {
 
                 return new ResultadoConsulta(
                         selo,
@@ -65,7 +74,8 @@ public class ConsultaTJPB implements ConsultaTribunal {
                         "",
                         "",
                         java.util.Collections.emptyMap(),
-                        null
+                        null,
+                        diagnostico
                 );
             }
 
@@ -80,25 +90,43 @@ public class ConsultaTJPB implements ConsultaTribunal {
              * ==================================================
              */
 
-            Map<String, String> campos =
-                    ParserTJPB.extrairCampos(
-                            resposta.body()
-                    );
+            Map<String, String> campos;
 
-            String tipoAto =
-                    ParserTJPB.extrairTipoAto(
-                            campos
-                    );
+            try {
+                campos = ParserTJPB.extrairCampos(resposta.body());
+            } catch (RuntimeException e) {
+                return resultadoComFalhaDeParsing(selo, diagnostico, e);
+            }
 
-            String subtipoAto =
-                    ParserTJPB.extrairSubtipoAto(
-                            campos
-                    );
+            if (!correspondeAoSeloConsultado(campos, numeroSelo)) {
 
-            String matriculaProtocolo =
-                    ParserTJPB.extrairMatriculaProtocolo(
-                            campos
-                    );
+                return new ResultadoConsulta(
+                        selo,
+                        Tribunal.TJPB,
+                        StatusConsulta.ERRO,
+                        "",
+                        "",
+                        "",
+                        java.util.Collections.emptyMap(),
+                        null,
+                        diagnostico.comTipoFalha(
+                                TipoFalhaConsulta.RESPOSTA_INESPERADA,
+                                null
+                        )
+                );
+            }
+
+            String tipoAto;
+            String subtipoAto;
+            String matriculaProtocolo;
+
+            try {
+                tipoAto = ParserTJPB.extrairTipoAto(campos);
+                subtipoAto = ParserTJPB.extrairSubtipoAto(campos);
+                matriculaProtocolo = ParserTJPB.extrairMatriculaProtocolo(campos);
+            } catch (RuntimeException e) {
+                return resultadoComFalhaDeParsing(selo, diagnostico, e);
+            }
 
             /*
              * ==================================================
@@ -147,7 +175,8 @@ public class ConsultaTJPB implements ConsultaTribunal {
                     tipoAto,
                     subtipoAto,
                     campos,
-                    qrCodeConteudo
+                    qrCodeConteudo,
+                    diagnostico
             );
 
         } catch (Exception e) {
@@ -155,7 +184,13 @@ public class ConsultaTJPB implements ConsultaTribunal {
             return new ResultadoConsulta(
                     selo,
                     Tribunal.TJPB,
-                    StatusConsulta.ERRO
+                    StatusConsulta.ERRO,
+                    "",
+                    "",
+                    "",
+                    java.util.Collections.emptyMap(),
+                    null,
+                    HttpUtil.diagnosticarExcecao(urlSolicitada, e)
             );
         }
     }
@@ -163,13 +198,20 @@ public class ConsultaTJPB implements ConsultaTribunal {
     @Override
     public DetalhesSelo consultarDetalhes(Selo selo) {
 
+        String urlSolicitada = "";
+
         try {
 
             String numeroSelo = selo.getNumero();
 
-            String url = URL_BASE + numeroSelo;
+            urlSolicitada = URL_BASE + numeroSelo;
 
-            HttpResponse<String> resposta = HttpUtil.get(url);
+            HttpResponse<String> resposta = HttpUtil.get(urlSolicitada);
+
+            DiagnosticoConsulta diagnostico = HttpUtil.diagnosticarResposta(
+                    urlSolicitada,
+                    resposta
+            );
 
             StatusConsulta status =
                     analisarResposta(
@@ -179,10 +221,30 @@ public class ConsultaTJPB implements ConsultaTribunal {
                             resposta.uri().toString()
                     );
 
-            Map<String, String> campos =
-                    ParserTJPB.extrairCampos(
-                            resposta.body()
-                    );
+            diagnostico = ajustarDiagnostico(
+                    status,
+                    diagnostico
+            );
+
+            Map<String, String> campos;
+            try {
+                campos = status == StatusConsulta.ENVIADO
+                        ? ParserTJPB.extrairCampos(resposta.body())
+                        : new LinkedHashMap<>();
+            } catch (RuntimeException e) {
+                return detalhesComFalhaDeParsing(selo, diagnostico, e);
+            }
+
+            if (status == StatusConsulta.ENVIADO
+                    && !correspondeAoSeloConsultado(campos, numeroSelo)) {
+
+                status = StatusConsulta.ERRO;
+                campos = new LinkedHashMap<>();
+                diagnostico = diagnostico.comTipoFalha(
+                        TipoFalhaConsulta.RESPOSTA_INESPERADA,
+                        null
+                );
+            }
 
             String qrCodeConteudo =
                     "https://selodigital.tjpb.jus.br/selocgj/QRCode?q="
@@ -193,7 +255,8 @@ public class ConsultaTJPB implements ConsultaTribunal {
                     Tribunal.TJPB,
                     status,
                     campos,
-                    qrCodeConteudo
+                    qrCodeConteudo,
+                    diagnostico
             );
 
         } catch (Exception e) {
@@ -203,18 +266,77 @@ public class ConsultaTJPB implements ConsultaTribunal {
                     Tribunal.TJPB,
                     StatusConsulta.ERRO,
                     new LinkedHashMap<>(),
-                    ""
+                    "",
+                    HttpUtil.diagnosticarExcecao(urlSolicitada, e)
             );
         }
     }
 
-    private StatusConsulta analisarResposta(
+    private DiagnosticoConsulta ajustarDiagnostico(
+            StatusConsulta status,
+            DiagnosticoConsulta diagnostico) {
+
+        if (status != StatusConsulta.ERRO
+                && diagnostico.temFalha()) {
+
+            return diagnostico.comTipoFalha(
+                    TipoFalhaConsulta.SEM_FALHA,
+                    null
+            );
+        }
+
+        if (status == StatusConsulta.ERRO
+                && !diagnostico.temFalha()) {
+
+            return diagnostico.comTipoFalha(
+                    TipoFalhaConsulta.RESPOSTA_INESPERADA,
+                    null
+            );
+        }
+
+        return diagnostico;
+    }
+
+    private ResultadoConsulta resultadoComFalhaDeParsing(
+            Selo selo,
+            DiagnosticoConsulta diagnostico,
+            RuntimeException e) {
+
+        return new ResultadoConsulta(
+                selo,
+                Tribunal.TJPB,
+                StatusConsulta.ERRO,
+                "",
+                "",
+                "",
+                java.util.Collections.emptyMap(),
+                null,
+                diagnostico.comTipoFalha(TipoFalhaConsulta.FALHA_DE_PARSING, e)
+        );
+    }
+
+    private DetalhesSelo detalhesComFalhaDeParsing(
+            Selo selo,
+            DiagnosticoConsulta diagnostico,
+            RuntimeException e) {
+
+        return new DetalhesSelo(
+                selo,
+                Tribunal.TJPB,
+                StatusConsulta.ERRO,
+                new LinkedHashMap<>(),
+                "",
+                diagnostico.comTipoFalha(TipoFalhaConsulta.FALHA_DE_PARSING, e)
+        );
+    }
+
+    static StatusConsulta analisarResposta(
             int statusCode,
             String html,
             String numeroSelo,
             String urlFinal) {
 
-        if (statusCode < 200 || statusCode >= 400) {
+        if (statusCode < 200 || statusCode >= 300) {
 
             return StatusConsulta.ERRO;
         }
@@ -314,7 +436,47 @@ public class ConsultaTJPB implements ConsultaTribunal {
         return StatusConsulta.ERRO;
     }
 
-    private String normalizar(String texto) {
+    /*
+     * O portal expõe o código do selo e o validador em campos separados.
+     * Quando ambos estão presentes, eles precisam corresponder exatamente ao
+     * identificador consultado; em layouts que omitam um deles mantemos a
+     * validação estrutural para não rejeitar um formato ainda não comprovado.
+     */
+    static boolean correspondeAoSeloConsultado(
+            Map<String, String> campos,
+            String numeroSelo) {
+
+        if (campos == null || numeroSelo == null) {
+            return true;
+        }
+
+        String esperado = numeroSelo
+                .replaceAll("[^A-Za-z0-9]", "")
+                .toUpperCase(Locale.ROOT);
+
+        if (!esperado.matches("[A-Z0-9]{12}")) {
+            return true;
+        }
+
+        String numeroNaPagina = campos.getOrDefault(
+                "Informações do Selo - Selo Nº",
+                ""
+        ).replaceAll("[^A-Za-z0-9]", "").toUpperCase(Locale.ROOT);
+
+        String validadorNaPagina = campos.getOrDefault(
+                "Informações do Selo - Validador",
+                ""
+        ).replaceAll("[^A-Za-z0-9]", "").toUpperCase(Locale.ROOT);
+
+        if (numeroNaPagina.isBlank() || validadorNaPagina.isBlank()) {
+            return true;
+        }
+
+        return esperado.substring(0, 8).equals(numeroNaPagina)
+                && esperado.substring(8).equals(validadorNaPagina);
+    }
+
+    private static String normalizar(String texto) {
 
         String normalizado = Normalizer.normalize(
                 texto,

@@ -16,6 +16,7 @@ public class DetalhesSelo {
     private final Selo selo;
     private final Tribunal tribunal;
     private final StatusConsulta status;
+    private final DiagnosticoConsulta diagnostico;
 
     private final Map<String, String> campos;
     private final String qrCodeConteudo;
@@ -27,9 +28,24 @@ public class DetalhesSelo {
             Map<String, String> campos,
             String qrCodeConteudo) {
 
+        this(selo, tribunal, status, campos, qrCodeConteudo,
+                DiagnosticoConsulta.semFalha());
+    }
+
+    public DetalhesSelo(
+            Selo selo,
+            Tribunal tribunal,
+            StatusConsulta status,
+            Map<String, String> campos,
+            String qrCodeConteudo,
+            DiagnosticoConsulta diagnostico) {
+
         this.selo = selo;
         this.tribunal = tribunal;
         this.status = status;
+        this.diagnostico = diagnostico == null
+                ? DiagnosticoConsulta.semFalha()
+                : diagnostico;
 
         this.campos =
                 campos == null
@@ -54,6 +70,10 @@ public class DetalhesSelo {
 
     public StatusConsulta getStatus() {
         return status;
+    }
+
+    public DiagnosticoConsulta getDiagnostico() {
+        return diagnostico;
     }
 
     public Map<String, String> getCampos() {

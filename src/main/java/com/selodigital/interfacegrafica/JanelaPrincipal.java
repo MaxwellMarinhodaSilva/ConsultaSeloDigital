@@ -9,6 +9,7 @@ import com.selodigital.consulta.TribunalFactory;
 import com.selodigital.modelo.ResultadoConsulta;
 import com.selodigital.modelo.Selo;
 import com.selodigital.modelo.Tribunal;
+import com.selodigital.util.PortalTjalUtil;
 import com.selodigital.util.SeloUtil;
 import javax.swing.ImageIcon;
 
@@ -62,6 +63,7 @@ public class JanelaPrincipal extends JanelaBase {
     private JButton botaoLimpar;
     private JButton botaoHistorico;
     private JButton botaoImportar;
+    private JButton botaoPortalTjal;
 
     /*
      * ==================================================
@@ -840,6 +842,12 @@ public class JanelaPrincipal extends JanelaBase {
                         com.selodigital.util.IconeUtil.abrir()
                 );
 
+        botaoPortalTjal =
+                new JButton(
+                        "Portal TJAL",
+                        com.selodigital.util.IconeUtil.abrir()
+                );
+
         botaoConsultar.putClientProperty(
                 "JButton.buttonType",
                 "default"
@@ -872,6 +880,17 @@ public class JanelaPrincipal extends JanelaBase {
 
         painel.add(
                 botaoImportar
+        );
+
+        botaoPortalTjal.setPreferredSize(
+                new Dimension(
+                        150,
+                        40
+                )
+        );
+
+        painel.add(
+                botaoPortalTjal
         );
 
         botaoHistorico.setPreferredSize(
@@ -971,6 +990,10 @@ public class JanelaPrincipal extends JanelaBase {
                 e -> importarSelos()
         );
 
+        botaoPortalTjal.addActionListener(
+                e -> abrirPortalTjal()
+        );
+
         /*
          * ==================================================
          * ALTERAÇÃO DO TRIBUNAL
@@ -991,6 +1014,59 @@ public class JanelaPrincipal extends JanelaBase {
                     atualizarLabelSelos();
                 }
         );
+    }
+
+    private void abrirPortalTjal() {
+
+        List<String> selos = campoSelos.getText().lines()
+                .map(String::trim)
+                .filter(valor -> !valor.isBlank())
+                .toList();
+
+        if (selos.size() != 1) {
+
+            JOptionPane.showMessageDialog(
+                    this,
+                    "Informe exatamente um selo para abrir o portal oficial do TJAL.",
+                    "Portal TJAL",
+                    JOptionPane.WARNING_MESSAGE
+            );
+
+            return;
+        }
+
+        String url = "";
+
+        try {
+
+            url = PortalTjalUtil.criarUrlConsulta(
+                    selos.getFirst()
+            ).toString();
+
+            PortalTjalUtil.abrirConsulta(
+                    selos.getFirst()
+            );
+
+        } catch (IllegalArgumentException ex) {
+
+            JOptionPane.showMessageDialog(
+                    this,
+                    ex.getMessage(),
+                    "Portal TJAL",
+                    JOptionPane.WARNING_MESSAGE
+            );
+
+        } catch (IOException ex) {
+
+            JOptionPane.showMessageDialog(
+                    this,
+                    "Não foi possível abrir o navegador padrão.\n"
+                            + "Acesse manualmente: "
+                            + url,
+                    "Portal TJAL",
+                    JOptionPane.ERROR_MESSAGE
+            );
+        }
     }
 
     private void importarSelos() {

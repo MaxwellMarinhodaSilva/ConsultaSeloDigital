@@ -1,9 +1,11 @@
 package com.selodigital.consulta;
 
 import com.selodigital.modelo.DetalhesSelo;
+import com.selodigital.modelo.DiagnosticoConsulta;
 import com.selodigital.modelo.ResultadoConsulta;
 import com.selodigital.modelo.Selo;
 import com.selodigital.modelo.StatusConsulta;
+import com.selodigital.modelo.TipoFalhaConsulta;
 import com.selodigital.modelo.Tribunal;
 import com.selodigital.util.HttpUtil;
 
@@ -31,10 +33,29 @@ public class ConsultaTJRN implements ConsultaTribunal {
 
     @Override
     public ResultadoConsulta consultar(Selo selo) {
+        String urlSolicitada = "";
         try {
-            HttpResponse<String> resposta = HttpUtil.get(montarUrlConsulta(selo.getNumero()));
+            urlSolicitada = montarUrlConsulta(selo.getNumero());
+            HttpResponse<String> resposta = HttpUtil.get(urlSolicitada);
+            DiagnosticoConsulta diagnostico = HttpUtil.diagnosticarResposta(
+                    urlSolicitada, resposta);
             StatusConsulta status = analisarResposta(resposta.statusCode(), resposta.body(), selo.getNumero());
-            Map<String, String> campos = ParserTJRN.extrairCampos(resposta.body());
+            diagnostico = ajustarDiagnostico(status, diagnostico);
+
+            if (status == StatusConsulta.ERRO
+                    || status == StatusConsulta.NAO_ENVIADO) {
+
+                return new ResultadoConsulta(selo, Tribunal.TJRN, status,
+                        "", "", "", java.util.Collections.emptyMap(), null,
+                        diagnostico);
+            }
+
+            Map<String, String> campos;
+            try {
+                campos = ParserTJRN.extrairCampos(resposta.body());
+            } catch (RuntimeException e) {
+                return resultadoComFalhaDeParsing(selo, diagnostico, e);
+            }
 
             return new ResultadoConsulta(
                     selo, Tribunal.TJRN, status,
@@ -42,26 +63,75 @@ public class ConsultaTJRN implements ConsultaTribunal {
                     ParserTJRN.extrairTipoAto(campos),
                     ParserTJRN.extrairSubtipoAto(campos),
                     campos,
-                    ParserTJRN.extrairQrCodeConteudo(resposta.body(), selo.getNumero()));
+                    ParserTJRN.extrairQrCodeConteudo(resposta.body(), selo.getNumero()),
+                    diagnostico);
         } catch (Exception e) {
             registrarErro("consulta", e);
-            return new ResultadoConsulta(selo, Tribunal.TJRN, StatusConsulta.ERRO);
+            return new ResultadoConsulta(selo, Tribunal.TJRN, StatusConsulta.ERRO,
+                    "", "", "", java.util.Collections.emptyMap(), null,
+                    HttpUtil.diagnosticarExcecao(urlSolicitada, e));
         }
     }
 
     @Override
     public DetalhesSelo consultarDetalhes(Selo selo) {
+        String urlSolicitada = "";
         try {
-            HttpResponse<String> resposta = HttpUtil.get(montarUrlConsulta(selo.getNumero()));
+            urlSolicitada = montarUrlConsulta(selo.getNumero());
+            HttpResponse<String> resposta = HttpUtil.get(urlSolicitada);
+            DiagnosticoConsulta diagnostico = HttpUtil.diagnosticarResposta(
+                    urlSolicitada, resposta);
             StatusConsulta status = analisarResposta(resposta.statusCode(), resposta.body(), selo.getNumero());
-            Map<String, String> campos = ParserTJRN.extrairCampos(resposta.body());
+            diagnostico = ajustarDiagnostico(status, diagnostico);
+            Map<String, String> campos;
+            try {
+                campos = status == StatusConsulta.ERRO
+                        || status == StatusConsulta.NAO_ENVIADO
+                        ? new LinkedHashMap<>()
+                        : ParserTJRN.extrairCampos(resposta.body());
+            } catch (RuntimeException e) {
+                return detalhesComFalhaDeParsing(selo, diagnostico, e);
+            }
             return new DetalhesSelo(selo, Tribunal.TJRN, status, campos,
-                    ParserTJRN.extrairQrCodeConteudo(resposta.body(), selo.getNumero()));
+                    ParserTJRN.extrairQrCodeConteudo(resposta.body(), selo.getNumero()),
+                    diagnostico);
         } catch (Exception e) {
             registrarErro("detalhes", e);
             return new DetalhesSelo(selo, Tribunal.TJRN, StatusConsulta.ERRO,
-                    new LinkedHashMap<>(), "");
+                    new LinkedHashMap<>(), "",
+                    HttpUtil.diagnosticarExcecao(urlSolicitada, e));
         }
+    }
+
+    private static DiagnosticoConsulta ajustarDiagnostico(
+            StatusConsulta status,
+            DiagnosticoConsulta diagnostico) {
+        if (status != StatusConsulta.ERRO && diagnostico.temFalha()) {
+            return diagnostico.comTipoFalha(
+                    TipoFalhaConsulta.SEM_FALHA, null);
+        }
+        return status == StatusConsulta.ERRO && !diagnostico.temFalha()
+                ? diagnostico.comTipoFalha(
+                TipoFalhaConsulta.RESPOSTA_INESPERADA, null)
+                : diagnostico;
+    }
+
+    private ResultadoConsulta resultadoComFalhaDeParsing(
+            Selo selo,
+            DiagnosticoConsulta diagnostico,
+            RuntimeException e) {
+        return new ResultadoConsulta(selo, Tribunal.TJRN, StatusConsulta.ERRO,
+                "", "", "", java.util.Collections.emptyMap(), null,
+                diagnostico.comTipoFalha(TipoFalhaConsulta.FALHA_DE_PARSING, e));
+    }
+
+    private DetalhesSelo detalhesComFalhaDeParsing(
+            Selo selo,
+            DiagnosticoConsulta diagnostico,
+            RuntimeException e) {
+        return new DetalhesSelo(selo, Tribunal.TJRN, StatusConsulta.ERRO,
+                new LinkedHashMap<>(), "",
+                diagnostico.comTipoFalha(TipoFalhaConsulta.FALHA_DE_PARSING, e));
     }
 
     private String montarUrlConsulta(String numeroSelo) {
@@ -70,7 +140,8 @@ public class ConsultaTJRN implements ConsultaTribunal {
 
     /* Visível ao teste do pacote: decide status, sem realizar HTTP. */
     static StatusConsulta analisarResposta(int statusCode, String html, String numeroSelo) {
-        if (html == null || html.isBlank() || statusCode >= 500) {
+        if (html == null || html.isBlank()
+                || statusCode < 200 || statusCode >= 300) {
             return StatusConsulta.ERRO;
         }
 
