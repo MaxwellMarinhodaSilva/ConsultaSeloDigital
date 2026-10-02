@@ -44,7 +44,7 @@ O TJAL é mantido somente para leitura e exibição de históricos antigos; o c�
 - Apache POI;
 - ZXing;
 - Maven;
-- `jpackage` para o instalador Windows configurado no `pom.xml`.
+- `jpackage` para gerar uma imagem da aplicação no Windows (`app-image`), conforme o `pom.xml`.
 
 ## Arquitetura
 
@@ -68,7 +68,7 @@ src/main/java/com/selodigital/
 - Apache Maven;
 - conexão com a internet;
 - disponibilidade dos serviços públicos consultados;
-- ambiente Windows configurado para a geração do instalador `.exe`, quando essa etapa for utilizada.
+- ambiente Windows com `jpackage` disponível para gerar a imagem da aplicação, quando essa etapa for utilizada.
 
 ## Compilação
 
@@ -84,7 +84,7 @@ Para executar o empacotamento definido no `pom.xml`:
 mvn clean package
 ```
 
-O empacotamento inclui um JAR com dependências e a etapa configurada com `jpackage` para geração do instalador Windows.
+O empacotamento inclui um JAR com dependências e a etapa configurada com `jpackage` para gerar uma imagem da aplicação (`app-image`) no Windows.
 
 ## Uso básico
 
