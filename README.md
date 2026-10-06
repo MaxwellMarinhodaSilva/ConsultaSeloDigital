@@ -1,6 +1,6 @@
 # ConsultaSeloDigital
 
-Aplicação desktop em Java 21 para consultar selos digitais em lote nos serviços públicos do TJPB, TJRN e TJPE.
+Aplicação desktop em Java 21 para consultar selos digitais do TJPB, TJRN e TJPE e abrir consultas do TJAL no portal oficial.
 
 <div align="center">
   <img src="assets/consulta-selo-digital.png"
@@ -16,9 +16,10 @@ O ConsultaSeloDigital centraliza a consulta de selos de diferentes tribunais em 
 
 - Tribunal de Justiça da Paraíba — TJPB;
 - Tribunal de Justiça do Rio Grande do Norte — TJRN;
-- Tribunal de Justiça de Pernambuco — TJPE.
+- Tribunal de Justiça de Pernambuco — TJPE;
+- Tribunal de Justiça de Alagoas — TJAL (abertura assistida no navegador).
 
-O TJAL é mantido somente para leitura e exibição de históricos antigos; o código não inicia novas consultas para esse tribunal.
+TJPB e TJRN são consultados diretamente pela aplicação; TJPE segue o fluxo de consulta implementado no projeto. Para o TJAL, o botão **Abrir no TJAL** abre a página correspondente no navegador padrão. Os dados e as validações permanecem sob responsabilidade do portal oficial do Tribunal, sem consulta automática pela aplicação.
 
 ## Funcionalidades
 
@@ -48,7 +49,7 @@ O TJAL é mantido somente para leitura e exibição de históricos antigos; o c�
 
 ## Arquitetura
 
-O projeto separa cada integração por meio da interface `ConsultaTribunal` e da `TribunalFactory`. Cada tribunal possui sua própria estratégia de consulta e seu próprio parser, enquanto `ConsultaSeloService` coordena o processamento em lote e a notificação de progresso.
+As consultas diretas usam a interface `ConsultaTribunal` e a `TribunalFactory`, com estratégias e parsers próprios para TJPB, TJRN e TJPE. `ConsultaSeloService` coordena seu processamento em lote e a notificação de progresso. O TJAL usa apenas a abertura assistida do portal oficial.
 
 ```text
 src/main/java/com/selodigital/
@@ -93,6 +94,8 @@ O empacotamento inclui um JAR com dependências e a etapa configurada com `jpack
 3. Inicie a consulta e acompanhe o progresso.
 4. Analise os resultados e abra os detalhes quando necessário.
 5. Exporte os dados em PDF ou XLSX.
+
+Para o TJAL, informe um selo e clique em **Abrir no TJAL** para abrir diretamente sua página oficial. Com vários selos, escolha na lista qual deseja abrir; somente uma página é aberta por ação. Os resultados são exibidos pelo próprio TJAL no navegador.
 
 ## Observações
 

@@ -23,6 +23,7 @@ import javax.swing.JOptionPane;
 import javax.swing.JPanel;
 import javax.swing.JScrollPane;
 import javax.swing.JTextArea;
+import javax.swing.JTextField;
 import javax.swing.JFileChooser;
 import javax.swing.filechooser.FileNameExtensionFilter;
 import java.awt.BorderLayout;
@@ -32,12 +33,18 @@ import java.awt.Font;
 import java.awt.GridBagConstraints;
 import java.awt.GridBagLayout;
 import java.awt.Insets;
+import java.awt.KeyboardFocusManager;
+import java.awt.Toolkit;
+import java.awt.Window;
+import java.awt.datatransfer.Clipboard;
+import java.awt.datatransfer.StringSelection;
 import java.io.IOException;
 import java.io.File;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.function.Supplier;
 import org.apache.poi.ss.usermodel.Cell;
 import org.apache.poi.ss.usermodel.DataFormatter;
 import org.apache.poi.ss.usermodel.Row;
@@ -64,6 +71,8 @@ public class JanelaPrincipal extends JanelaBase {
     private JButton botaoHistorico;
     private JButton botaoImportar;
     private JButton botaoPortalTjal;
+    private String ultimoSeloAcionadoTjal;
+    private long ultimoAcionamentoTjalNanos;
 
     /*
      * ==================================================
@@ -810,6 +819,9 @@ public class JanelaPrincipal extends JanelaBase {
     private JPanel criarBotoes() {
 
         JPanel painel =
+                new JPanel(new BorderLayout());
+
+        JPanel linhaBotoes =
                 new JPanel(
                         new FlowLayout(
                                 FlowLayout.RIGHT,
@@ -844,9 +856,12 @@ public class JanelaPrincipal extends JanelaBase {
 
         botaoPortalTjal =
                 new JButton(
-                        "Portal TJAL",
+                        "Abrir no TJAL",
                         com.selodigital.util.IconeUtil.abrir()
                 );
+        botaoPortalTjal.setToolTipText(
+                "Abre a consulta diretamente no portal oficial do TJAL."
+        );
 
         botaoConsultar.putClientProperty(
                 "JButton.buttonType",
@@ -867,7 +882,7 @@ public class JanelaPrincipal extends JanelaBase {
                 )
         );
 
-        painel.add(
+        linhaBotoes.add(
                 botaoHistorico
         );
 
@@ -878,7 +893,7 @@ public class JanelaPrincipal extends JanelaBase {
                 )
         );
 
-        painel.add(
+        linhaBotoes.add(
                 botaoImportar
         );
 
@@ -889,7 +904,7 @@ public class JanelaPrincipal extends JanelaBase {
                 )
         );
 
-        painel.add(
+        linhaBotoes.add(
                 botaoPortalTjal
         );
 
@@ -900,13 +915,24 @@ public class JanelaPrincipal extends JanelaBase {
                 )
         );
 
-        painel.add(
+        linhaBotoes.add(
                 botaoLimpar
         );
 
-        painel.add(
+        linhaBotoes.add(
                 botaoConsultar
         );
+
+        JLabel avisoTjal = new JLabel(
+                "Consulta no portal oficial; resultados exibidos no navegador.",
+                JLabel.RIGHT
+        );
+        avisoTjal.setFont(avisoTjal.getFont().deriveFont(Font.PLAIN, 11f));
+        avisoTjal.setForeground(javax.swing.UIManager.getColor("Label.disabledForeground"));
+        avisoTjal.setBorder(BorderFactory.createEmptyBorder(0, 0, 3, 12));
+
+        painel.add(linhaBotoes, BorderLayout.CENTER);
+        painel.add(avisoTjal, BorderLayout.SOUTH);
 
         return painel;
     }
@@ -1023,11 +1049,11 @@ public class JanelaPrincipal extends JanelaBase {
                 .filter(valor -> !valor.isBlank())
                 .toList();
 
-        if (selos.size() != 1) {
+        if (selos.isEmpty()) {
 
             JOptionPane.showMessageDialog(
                     this,
-                    "Informe exatamente um selo para abrir o portal oficial do TJAL.",
+                    "Informe ao menos um selo para abrir o portal oficial do TJAL.",
                     "Portal TJAL",
                     JOptionPane.WARNING_MESSAGE
             );
@@ -1035,38 +1061,97 @@ public class JanelaPrincipal extends JanelaBase {
             return;
         }
 
-        String url = "";
+        if (selos.size() > 1) {
+            new JanelaPortalTjal(this, selos, this::abrirSeloTjal)
+                    .setVisible(true);
+            return;
+        }
+
+        abrirSeloTjal(selos.getFirst());
+    }
+
+    private void abrirSeloTjal(String selo) {
+        final String url;
 
         try {
-
             url = PortalTjalUtil.criarUrlConsulta(
-                    selos.getFirst()
+                    selo
             ).toString();
-
-            PortalTjalUtil.abrirConsulta(
-                    selos.getFirst()
-            );
-
         } catch (IllegalArgumentException ex) {
-
             JOptionPane.showMessageDialog(
                     this,
                     ex.getMessage(),
                     "Portal TJAL",
                     JOptionPane.WARNING_MESSAGE
             );
-
-        } catch (IOException ex) {
-
-            JOptionPane.showMessageDialog(
-                    this,
-                    "Não foi possível abrir o navegador padrão.\n"
-                            + "Acesse manualmente: "
-                            + url,
-                    "Portal TJAL",
-                    JOptionPane.ERROR_MESSAGE
-            );
+            return;
         }
+
+        long agora = System.nanoTime();
+        if (acionamentoDuplicadoTjal(
+                selo, ultimoSeloAcionadoTjal,
+                agora, ultimoAcionamentoTjalNanos
+        )) {
+            return;
+        }
+        ultimoSeloAcionadoTjal = selo;
+        ultimoAcionamentoTjalNanos = agora;
+
+        try {
+            PortalTjalUtil.abrirConsulta(selo);
+        } catch (IOException | SecurityException ex) {
+            mostrarFalhaAberturaTjal(url);
+        }
+    }
+
+    static boolean acionamentoDuplicadoTjal(
+            String selo, String anterior, long agoraNanos, long anteriorNanos
+    ) {
+        return selo.equals(anterior)
+                && agoraNanos - anteriorNanos >= 0
+                && agoraNanos - anteriorNanos < 800_000_000L;
+    }
+
+    private void mostrarFalhaAberturaTjal(String url) {
+        Window ativa = KeyboardFocusManager.getCurrentKeyboardFocusManager()
+                .getActiveWindow();
+        JOptionPane.showMessageDialog(
+                ativa instanceof JanelaPortalTjal ? ativa : this,
+                criarConteudoFalhaAberturaTjal(
+                        url, () -> Toolkit.getDefaultToolkit().getSystemClipboard()
+                ),
+                "Abrir no TJAL",
+                JOptionPane.ERROR_MESSAGE
+        );
+    }
+
+    static JPanel criarConteudoFalhaAberturaTjal(
+            String url, Supplier<Clipboard> areaTransferencia
+    ) {
+        JPanel conteudo = new JPanel(new BorderLayout(0, 8));
+        conteudo.add(new JLabel(
+                "Não foi possível abrir automaticamente o navegador."
+        ), BorderLayout.NORTH);
+
+        JTextField campoUrl = new JTextField(url, 52);
+        campoUrl.setEditable(false);
+        conteudo.add(campoUrl, BorderLayout.CENTER);
+
+        JPanel acoes = new JPanel(new FlowLayout(FlowLayout.LEFT, 0, 0));
+        JButton copiar = new JButton("Copiar endereço");
+        JLabel feedback = new JLabel(" ");
+        acoes.add(copiar);
+        acoes.add(feedback);
+        copiar.addActionListener(e -> {
+            try {
+                areaTransferencia.get().setContents(new StringSelection(url), null);
+                feedback.setText("  Endereço copiado.");
+            } catch (IllegalStateException | SecurityException ex) {
+                feedback.setText("  Não foi possível copiar; selecione o endereço acima.");
+            }
+        });
+        conteudo.add(acoes, BorderLayout.SOUTH);
+        return conteudo;
     }
 
     private void importarSelos() {
